@@ -1,13 +1,13 @@
 import React, { useEffect, useRef, useState } from "react";
 
-const PushUpCounter = () => {
+const CrunchCounter = () => {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
-  const [pushUpCount, setPushUpCount] = useState(0);
+  const [crunchCount, setCrunchCount] = useState(0);
   const [feedback, setFeedback] = useState("Loading pose detection...");
   const [isStarted, setIsStarted] = useState(false);
   const [error, setError] = useState("");
-  const [stage, setStage] = useState("up"); // "up" or "down"
+  const [stage, setStage] = useState("down"); // "up" or "down"
   const [debugInfo, setDebugInfo] = useState({});
 
   useEffect(() => {
@@ -39,26 +39,15 @@ const PushUpCounter = () => {
     };
   }, []);
 
-  const calculateAngle = (shoulder, elbow, wrist) => {
-    // Convert to screen coordinates
-    const shoulderScreen = { x: shoulder.x * canvasRef.current.width, y: shoulder.y * canvasRef.current.height };
-    const elbowScreen = { x: elbow.x * canvasRef.current.width, y: elbow.y * canvasRef.current.height };
-    const wristScreen = { x: wrist.x * canvasRef.current.width, y: wrist.y * canvasRef.current.height };
+  const calculateAngle = (pointA, pointB, pointC) => {
+    const vectorAB = { x: pointB.x - pointA.x, y: pointB.y - pointA.y };
+    const vectorBC = { x: pointC.x - pointB.x, y: pointC.y - pointB.y };
 
-    // Calculate vectors
-    const vector1 = { x: elbowScreen.x - shoulderScreen.x, y: elbowScreen.y - shoulderScreen.y };
-    const vector2 = { x: wristScreen.x - elbowScreen.x, y: wristScreen.y - elbowScreen.y };
+    const dotProduct = vectorAB.x * vectorBC.x + vectorAB.y * vectorBC.y;
+    const magnitudeAB = Math.sqrt(vectorAB.x ** 2 + vectorAB.y ** 2);
+    const magnitudeBC = Math.sqrt(vectorBC.x ** 2 + vectorBC.y ** 2);
 
-    // Calculate dot product
-    const dotProduct = vector1.x * vector2.x + vector1.y * vector2.y;
-
-    // Calculate magnitudes
-    const magnitude1 = Math.sqrt(vector1.x ** 2 + vector1.y ** 2);
-    const magnitude2 = Math.sqrt(vector2.x ** 2 + vector2.y ** 2);
-
-    // Calculate angle in degrees
-    const angle = Math.acos(dotProduct / (magnitude1 * magnitude2)) * (180 / Math.PI);
-
+    const angle = Math.acos(dotProduct / (magnitudeAB * magnitudeBC)) * (180 / Math.PI);
     return angle;
   };
 
@@ -68,10 +57,10 @@ const PushUpCounter = () => {
     const requiredLandmarks = [
       landmarks[11], // Left shoulder
       landmarks[12], // Right shoulder
-      landmarks[13], // Left elbow
-      landmarks[14], // Right elbow
-      landmarks[15], // Left wrist
-      landmarks[16], // Right wrist
+      landmarks[23], // Left hip
+      landmarks[24], // Right hip
+      landmarks[27], // Left knee
+      landmarks[28], // Right knee
     ];
 
     return requiredLandmarks.every(landmark => landmark && landmark.visibility > 0.65);
@@ -115,36 +104,34 @@ const PushUpCounter = () => {
           const landmarks = results.poseLandmarks;
 
           if (!isValidPose(landmarks)) {
-            setFeedback("Please ensure your full body is visible");
+            setFeedback("Please ensure your upper body is visible");
             return;
           }
 
-          // Calculate angles
-          const leftElbowAngle = calculateAngle(
-            landmarks[11], // Left shoulder
-            landmarks[13], // Left elbow
-            landmarks[15]  // Left wrist
-          );
+          // Calculate angles for crunch detection
+          const shoulderLeft = landmarks[11]; // Left shoulder
+          const shoulderRight = landmarks[12]; // Right shoulder
+          const hipLeft = landmarks[23]; // Left hip
+          const hipRight = landmarks[24]; // Right hip
+          const kneeLeft = landmarks[27]; // Left knee
+          const kneeRight = landmarks[28]; // Right knee
 
-          const rightElbowAngle = calculateAngle(
-            landmarks[12], // Right shoulder
-            landmarks[14], // Right elbow
-            landmarks[16]  // Right wrist
-          );
-
-          const avgElbowAngle = (leftElbowAngle + rightElbowAngle) / 2;
+          // Calculate angle between shoulder, hip, and knee
+          const leftCrunchAngle = calculateAngle(shoulderLeft, hipLeft, kneeLeft);
+          const rightCrunchAngle = calculateAngle(shoulderRight, hipRight, kneeRight);
+          const avgCrunchAngle = (leftCrunchAngle + rightCrunchAngle) / 2;
 
           // Update debug info
           setDebugInfo({
-            leftElbowAngle: Math.round(leftElbowAngle),
-            rightElbowAngle: Math.round(rightElbowAngle),
-            avgElbowAngle: Math.round(avgElbowAngle),
+            leftCrunchAngle: Math.round(leftCrunchAngle),
+            rightCrunchAngle: Math.round(rightCrunchAngle),
+            avgCrunchAngle: Math.round(avgCrunchAngle),
             stage
           });
 
           // Draw visualization
           ctx.fillStyle = 'red';
-          [11, 12, 13, 14, 15, 16].forEach(index => {
+          [11, 12, 23, 24, 27, 28].forEach(index => {
             const point = landmarks[index];
             ctx.beginPath();
             ctx.arc(
@@ -159,35 +146,33 @@ const PushUpCounter = () => {
           ctx.strokeStyle = '#00ff00';
           ctx.lineWidth = 2;
 
-          // Draw arms
+          // Draw shoulders to hips
           ctx.beginPath();
-          ctx.moveTo(landmarks[11].x * canvasRef.current.width, landmarks[11].y * canvasRef.current.height);
-          ctx.lineTo(landmarks[13].x * canvasRef.current.width, landmarks[13].y * canvasRef.current.height);
-          ctx.lineTo(landmarks[15].x * canvasRef.current.width, landmarks[15].y * canvasRef.current.height);
+          ctx.moveTo(shoulderLeft.x * canvasRef.current.width, shoulderLeft.y * canvasRef.current.height);
+          ctx.lineTo(hipLeft.x * canvasRef.current.width, hipLeft.y * canvasRef.current.height);
           ctx.stroke();
 
           ctx.beginPath();
-          ctx.moveTo(landmarks[12].x * canvasRef.current.width, landmarks[12].y * canvasRef.current.height);
-          ctx.lineTo(landmarks[14].x * canvasRef.current.width, landmarks[14].y * canvasRef.current.height);
-          ctx.lineTo(landmarks[16].x * canvasRef.current.width, landmarks[16].y * canvasRef.current.height);
+          ctx.moveTo(shoulderRight.x * canvasRef.current.width, shoulderRight.y * canvasRef.current.height);
+          ctx.lineTo(hipRight.x * canvasRef.current.width, hipRight.y * canvasRef.current.height);
           ctx.stroke();
 
           // Draw angles
           ctx.font = '16px Arial';
           ctx.fillStyle = 'white';
-          ctx.fillText(`Left Elbow: ${Math.round(leftElbowAngle)}°`, 10, 20);
-          ctx.fillText(`Right Elbow: ${Math.round(rightElbowAngle)}°`, 10, 40);
-          ctx.fillText(`Avg Elbow: ${Math.round(avgElbowAngle)}°`, 10, 60);
+          ctx.fillText(`Left Crunch Angle: ${Math.round(leftCrunchAngle)}°`, 10, 20);
+          ctx.fillText(`Right Crunch Angle: ${Math.round(rightCrunchAngle)}°`, 10, 40);
+          ctx.fillText(`Avg Crunch Angle: ${Math.round(avgCrunchAngle)}°`, 10, 60);
           ctx.fillText(`Stage: ${stage}`, 10, 80);
 
-          // Improved push-up detection logic
-          if (stage === "up" && avgElbowAngle > 160) {
-            setStage("down");
-            setFeedback("Good! Now push down");
-          } else if (stage === "down" && avgElbowAngle < 90) {
-            setPushUpCount(prev => prev + 1);
+          // Improved crunch detection logic
+          if (stage === "down" && avgCrunchAngle < 45) {
             setStage("up");
-            setFeedback("Great push-up! Go for another one");
+            setFeedback("Good! Now lower back down");
+          } else if (stage === "up" && avgCrunchAngle > 100) {
+            setCrunchCount(prev => prev + 1);
+            setStage("down");
+            setFeedback("Great crunch! Go for another one");
           }
         });
 
@@ -202,7 +187,7 @@ const PushUpCounter = () => {
         camera.start();
         setIsStarted(true);
         setError("");
-        setFeedback("Position yourself to start counting push-ups");
+        setFeedback("Position yourself to start counting crunches");
       }
     } catch (err) {
       setError("Failed to access camera. Please ensure you have granted camera permissions.");
@@ -221,15 +206,15 @@ const PushUpCounter = () => {
   };
 
   const resetCounter = () => {
-    setPushUpCount(0);
-    setFeedback("Counter reset. Ready to count push-ups.");
-    setStage("up");
+    setCrunchCount(0);
+    setFeedback("Counter reset. Ready to count crunches.");
+    setStage("down");
   };
 
   return (
     <div className="flex flex-col items-center gap-4 p-4">
-      <h1 className="text-2xl font-bold">Push-Up Counter</h1>
-      <p className="text-lg mb-4">Count: {pushUpCount}</p>
+      <h1 className="text-2xl font-bold">Crunch Counter</h1>
+      <p className="text-lg mb-4">Count: {crunchCount}</p>
 
       <div className="flex gap-4 mb-4">
         <button
@@ -274,14 +259,14 @@ const PushUpCounter = () => {
       <div className="text-sm text-gray-600 mt-4">
         <p>Instructions:</p>
         <ul className="list-disc pl-5">
-          <li>Stand 4-6 feet back from the camera</li>
-          <li>Ensure your full body is visible</li>
-          <li>Keep your body straight during push-ups</li>
-          <li>Watch the elbow angle indicators for feedback</li>
+          <li>Lie down with your knees bent and feet flat on the ground.</li>
+          <li>Ensure your upper body is visible to the camera.</li>
+          <li>Focus on lifting your shoulder blades off the ground.</li>
+          <li>Watch the angle indicators for feedback.</li>
         </ul>
       </div>
     </div>
   );
 };
 
-export default PushUpCounter;
+export default CrunchCounter;
